@@ -1,5 +1,105 @@
-#-*- coding:utf-8 -*-    --------------Ashare 股票行情数据双核心版( https://github.com/mpquant/Ashare ) 
-import json,requests,datetime;      import pandas as pd  #
+import json, requests
+from datetime import datetime
+import pandas as pd
+
+from abc import ABC, abstractmethod
+
+class ApiServerBase(ABC):
+    @abstractmethod
+    def query_daily_prices(self):
+        pass
+
+    @abstractmethod
+    def query_hourly_prices(self):
+        pass
+
+    @abstractmethod
+    def query_minute_prices(self):
+        pass
+    pass
+
+# TODO: 'Xday','Xmouth', 'Xminute' # 'daily'(等同于'1d'), 'minute'(等同于'1m')
+    
+class Tencent(ApiServerBase):
+    def __init__(self) -> None:
+        pass
+
+    def query_daily_prices(self, security: str, frequency="1day", end_date=datetime.now()) -> pd.DataFrame:
+
+        if not any(frequency.endswith(f) for f in ["day", "minute", "week", "mouth"]): # TODO:
+            raise RuntimeError("frequency error")
+
+        if not isinstance(end_date, datetime):
+            raise TypeError(type(end_date))
+        
+
+        # TODO: check security
+        end_date_str = end_date.strftime(r'%Y-%m-%d')
+
+        # 提取前面的数字
+        count = int(''.join(c for c in frequency if c.isdigit()))
+        # 提取后面的单词
+        freq = ''.join(c for c in frequency if c.isalpha())
+
+        URL = f'http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={security},{freq},,{end_date_str},{count},qfq' # TODO: qfq 前复权
+
+        content = json.loads(requests.get(URL).content)
+        print(json.dumps(content, indent=4))
+        '''
+        {
+            "code": 0,
+            "msg": "",
+            "data": {
+                "sh605577": {
+                    "qfqday": [
+                        [
+                            "2024-01-25",
+                            "27.590",
+                            "30.800",
+                            "30.800",
+                            "27.120",
+                            "285458.000"
+                        ]
+                    ],
+        '''
+        # 指数是 freq 其他的则是 qfq+freq 
+        day = "day" if "qfq" + freq not in content["data"][security] else "qfq" + freq
+        data = content["data"][security][day]
+
+        columns = ['time','open','close','high','low','volume']
+        df = pd.DataFrame(
+            data, 
+            columns=columns,
+        )
+        # 除了time之外都进行浮点化
+        df[columns[1:]] = df[columns[1:]].astype("float")
+
+        df.loc[:, "time"] = pd.to_datetime(df["time"])
+
+        df.set_index(['time'], inplace=True) # Whether to modify the DataFrame rather than creating a new one.
+        # df.index.name = '' TODO:?
+
+        return df
+
+    def query_minute_prices(self, security: str, frequency="1minute", end_date=datetime.now()) -> pd.DataFrame:
+        if not frequency.endswith("minute"): 
+            raise RuntimeError(f"frequency error :{frequency}")
+
+        if not isinstance(end_date, datetime):
+            raise TypeError(type(end_date))
+
+    def query_hourly_prices(self):
+        pass
+
+
+
+
+Tencent().query_daily_prices("sh000001", frequency="1day")
+Tencent().query_daily_prices("sh605577", frequency="1day")
+
+
+        
+
 
 #腾讯日线
 def get_price_day_tx(code, end_date='', count=10, frequency='1d'):     #日线获取  
@@ -59,11 +159,11 @@ def get_price(code, end_date='',count=10, frequency='1d', fields=[]):        #�
          try:    return get_price_sina(  xcode,end_date=end_date,count=count,frequency=frequency)   #主力   
          except: return get_price_min_tx(xcode,end_date=end_date,count=count,frequency=frequency)   #备用
         
-if __name__ == '__main__':    
-    df=get_price('sh000001',frequency='1d',count=10)      #支持'1d'日, '1w'周, '1M'月  
-    print('上证指数日线行情\n',df)
+# if __name__ == '__main__':    
+#     df=get_price('sh000001',frequency='1d',count=10)      #支持'1d'日, '1w'周, '1M'月  
+#     print('上证指数日线行情\n',df)
     
-    df=get_price('000001.XSHG',frequency='15m',count=10)  #支持'1m','5m','15m','30m','60m'
-    print('上证指数分钟线\n',df)
+#     df=get_price('000001.XSHG',frequency='15m',count=10)  #支持'1m','5m','15m','30m','60m'
+#     print('上证指数分钟线\n',df)
 
 # Ashare 股票行情数据( https://github.com/mpquant/Ashare ) 
