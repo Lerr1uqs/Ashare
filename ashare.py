@@ -175,17 +175,14 @@ class Sina(ApiServerBase):
         df.set_index(['day'], inplace=True)
 
         return df
+# TODO: decorator check security
 
-class Api:
-    def __init__(self) -> None:
-        self._tencent = Tencent()
-        self._sina = Sina()
-    
-    def query_prices_untilnow(self, security: str, frequency='60minute', count=10) -> pd.DataFrame:
-        '''
-        tx支持: 1minute 5minute 10minute... 1day 1week 1month
-        xl支持:         5minute 10minute... 1day 1week 1month
-        '''
+def security_checker(func):
+
+    def wrapper(self, security: str, *args, **kwargs):
+        # 检查 security 是否符合要求，这里假设 security 必须是字符串类型
+        if not isinstance(security, str):
+            raise TypeError("The 'security' parameter must be a string.")
 
         while True:
             if any(security.endswith(end) for end in [".XSHG", ".XSHE"]):
@@ -196,16 +193,36 @@ class Api:
             
             raise RuntimeError(f"security format error : {security}")
 
+        #证券代码编码兼容处理 
+        code = security.replace('.XSHG', '').replace('.XSHE', '')
+        code = 'sh' + code if ('XSHG' in security) else 'sz' + code if ('XSHE' in security) else security
+
+        # 调用原始函数
+        result = func(self, code, *args, **kwargs)
+        
+        return result
+    
+    return wrapper
+
+
+class Api:
+    def __init__(self) -> None:
+        self._tencent = Tencent()
+        self._sina = Sina()
+
+    @security_checker
+    def query_prices_untilnow(self, security: str, frequency='60minute', count=10) -> pd.DataFrame:
+        '''
+        tx支持: 1minute 5minute 10minute... 1day 1week 1month
+        xl支持:         5minute 10minute... 1day 1week 1month
+        '''
+
         n    = int(''.join(c for c in frequency if c.isdigit()))
         freq = ''.join(c for c in frequency if c.isalpha())
         
         if freq not in ["minute", "day", "week", "month"]:
             raise RuntimeError(f"frequency error : {frequency}")
         
-        #证券代码编码兼容处理 
-        code = security.replace('.XSHG', '').replace('.XSHE', '')
-        code = 'sh' + code if ('XSHG' in security) else 'sz' + code if ('XSHE' in security) else security
-
         if freq == "minute":
 
             try:
@@ -252,7 +269,8 @@ class Api:
         else:
             raise RuntimeError(f"unhandled freq : {freq}")
 
-    def query_data_region(self, security:str, start: datetime, end: datetime) -> pd.DataFrame:
+    @security_checker
+    def query_data_region(self, security: str, start: datetime, end: datetime) -> pd.DataFrame:
         '''
         以每日价格查询数据范围. 最大可回查590天
         NOTE: 目前仍不完备 可能出现起始时间不在start的问题? 不过这种情况只是假设
@@ -264,11 +282,11 @@ class Api:
 
         days = (datetime.now() - start).days + 200
 
-        data = self._tencent.query_prices(security, "day", end_date=end, count=days)
+        data = self.query_prices_untilnow(security, "1day", count=days)
 
         df = data.query('index >= @start and index <= @end')
-        # if df.index[0] > start:
-        #     logger.warning("exceed the limit of API(590 count), adjusted the start time")
+        if df.index[0] > start:
+            logger.warning("exceed the limit of API(590 count), adjusted the start time")
 
         return df 
 
@@ -283,5 +301,5 @@ if __name__ == "__main__":
     # print(api.query_prices_untilnow("sh605577", "1week", count=3))
     # print(api.query_prices_untilnow("sh605577", "1month", count=3))
 
-    print(api.query_data_region("sh605577", start=datetime(2021, 3, 9), end=datetime(2022, 5, 8)))
+    print(api.query_data_region("sh605577", start=datetime(2022, 3, 9), end=datetime(2023, 5, 8)))
     # print(api.query_data_region("sh605577", start=datetime(2021, 3, 9), end=datetime.now()))
