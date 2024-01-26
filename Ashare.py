@@ -264,11 +264,11 @@ class Api:
 
         days = (datetime.now() - start).days + 200
 
-        data = self.query_prices_untilnow(security, "1day", count=days)
+        data = self._tencent.query_prices(security, "day", end_date=end, count=days)
 
         df = data.query('index >= @start and index <= @end')
-        if df.index[0] > start:
-            logger.warning("exceed the limit of API(590 count), adjusted the start time")
+        # if df.index[0] > start:
+        #     logger.warning("exceed the limit of API(590 count), adjusted the start time")
 
         return df 
 
@@ -283,5 +283,5 @@ if __name__ == "__main__":
     # print(api.query_prices_untilnow("sh605577", "1week", count=3))
     # print(api.query_prices_untilnow("sh605577", "1month", count=3))
 
-    # print(api.query_data_region("sh605577", start=datetime(2021, 3, 9), end=datetime(2022, 5, 8)))
-    print(api.query_data_region("sh605577", start=datetime(2021, 3, 9), end=datetime.now()))
+    print(api.query_data_region("sh605577", start=datetime(2021, 3, 9), end=datetime(2022, 5, 8)))
+    # print(api.query_data_region("sh605577", start=datetime(2021, 3, 9), end=datetime.now()))

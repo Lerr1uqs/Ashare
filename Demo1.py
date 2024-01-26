@@ -1,10 +1,10 @@
 #A股票行情数据获取演示   https://github.com/mpquant/Ashare
-from  Ashare import *
+from Ashare import api
     
 # 证券代码兼容多种格式 通达信，同花顺，聚宽
 # sh000001 (000001.XSHG)    sz399006 (399006.XSHE)   sh600519 ( 600519.XSHG ) 
 
-df=get_price('sh000001',frequency='1d',count=5)      #默认获取今天往前5天的日线行情
+df = api.query_prices_untilnow('sh000001',frequency='1day',count=5)      #默认获取今天往前5天的日线行情
 print('上证指数日线行情\n',df)
 
 df=get_price('000001.XSHG',frequency='1d',count=5,end_date='2021-04-30')   #可以指定结束日期，获取历史行情
