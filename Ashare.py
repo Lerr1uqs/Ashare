@@ -71,17 +71,27 @@ class Tencent(ApiServerBase):
         day = "day" if "qfq" + freq not in content["data"][security] else "qfq" + freq
         data = content["data"][security][day]
 
+        '''
+        ['2022-06-24', '11.510', '11.370', '11.530', '11.340', '24319.000', {'nd': '2021', 'fh_sh': '1', 'djr': '2022-06-23', 'cqr': '2022-06-24', 'FHcontent': '10派1元'}]
+        ['2023-07-05', '11.270', '11.220', '11.430', '11.200', '20268.000', {'nd': '2022', 'fh_sh': '1.1', 'djr': '2023-07-04', 'cqr': '2023-07-05', 'FHcontent': '10派1.1元'}]
+        '''
+
+        # NOTE: data会格外加入一栏除权信息 需要清洗
+        for i, d in enumerate(data):
+            data[i] = d[:6]
+
         columns = ['time','open','close','high','low','volume']
         df = pd.DataFrame(
             data, 
             columns=columns,
         )
+
         # 除了time之外都进行浮点化
         df[columns[1:]] = df[columns[1:]].astype("float")
 
         df.loc[:, "time"] = pd.to_datetime(df["time"])
 
-        df.set_index(['time'], inplace=True) # Whether to modify the DataFrame rather than creating a new one.
+        df.set_index('time', inplace=True) # Whether to modify the DataFrame rather than creating a new one.
         # df.index.name = '' TODO:?
 
         return df
@@ -201,12 +211,12 @@ class Api:
             try:
                 return self._tencent.query_minute_prices(security, frequency, count=count)
             except Exception as e:
-                logger.info(f"found exception {e}, try next server")
+                logger.info(f"found exception {e}, try next api")
                 
             try:
                 return self._sina.query_prices(security, frequency=str(n)+"m", count=count)
             except Exception as e:
-                logger.error(f"backup server failed with {e}")
+                logger.error(f"backup api failed with {e}")
                 raise e
 
         elif freq in ["day", "week", "month"]:
@@ -217,7 +227,7 @@ class Api:
             try:
                 return self._tencent.query_prices(security, frequency=freq, count=count)
             except Exception as e:
-                logger.info(f"found exception {e}, try next server")
+                logger.info(f"found exception {e}, try next api")
                 
             try:
                 # 日线1d=240m   周线1w=1200m  1月=7200m
@@ -236,18 +246,42 @@ class Api:
                 return self._sina.query_prices(security, frequency=freq, count=count)
 
             except Exception as e:
-                logger.error(f"backup server failed with {e}")
+                logger.error(f"backup api failed with {e}")
                 raise e
 
         else:
             raise RuntimeError(f"unhandled freq : {freq}")
 
+    def query_data_region(self, security:str, start: datetime, end: datetime) -> pd.DataFrame:
+        '''
+        以每日价格查询数据范围. 最大可回查590天
+        NOTE: 目前仍不完备 可能出现起始时间不在start的问题? 不过这种情况只是假设
+        '''
+        if type(start) != datetime or type(end) != datetime:
+            raise TypeError
+
+        assert end.date() <= datetime.now().date()
+
+        days = (datetime.now() - start).days + 200
+
+        data = self.query_prices_untilnow(security, "1day", count=days)
+
+        df = data.query('index >= @start and index <= @end')
+        if df.index[0] > start:
+            logger.warning("exceed the limit of API(590 count), adjusted the start time")
+
+        return df 
+
+
 api = Api()
             
 
 if __name__ == "__main__":
-    print(api.query_prices_untilnow("sh605577", "1minute", count=3))
-    print(api.query_prices_untilnow("sh605577", "5minute", count=3))
-    print(api.query_prices_untilnow("sh605577", "1day", count=3))
-    print(api.query_prices_untilnow("sh605577", "1week", count=3))
-    print(api.query_prices_untilnow("sh605577", "1month", count=3))
+    # print(api.query_prices_untilnow("sh605577", "1minute", count=3))
+    # print(api.query_prices_untilnow("sh605577", "5minute", count=3))
+    # print(api.query_prices_untilnow("sh605577", "1day", count=3))
+    # print(api.query_prices_untilnow("sh605577", "1week", count=3))
+    # print(api.query_prices_untilnow("sh605577", "1month", count=3))
+
+    # print(api.query_data_region("sh605577", start=datetime(2021, 3, 9), end=datetime(2022, 5, 8)))
+    print(api.query_data_region("sh605577", start=datetime(2021, 3, 9), end=datetime.now()))
