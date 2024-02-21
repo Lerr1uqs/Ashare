@@ -2,7 +2,7 @@ import json, requests
 from datetime import datetime
 import pandas as pd
 from loguru import logger
-
+from typing import Optional
 from abc import ABC, abstractmethod
 
 class ApiServerBase(ABC):
@@ -99,7 +99,7 @@ class Tencent(ApiServerBase):
     def query_minute_prices(self, security: str, frequency="1minute", end_date=datetime.now(), count=10) -> pd.DataFrame:
         '''
         腾讯分钟线.
-        frequency in [1minute, 5minute, 10minute ...]
+        frequency in [1minute, 5minute, 15minute ...]
         '''
         if not frequency.endswith("minute"): 
             raise RuntimeError(f"frequency error :{frequency}")
@@ -116,6 +116,9 @@ class Tencent(ApiServerBase):
         URL = f'http://ifzq.gtimg.cn/appstock/app/kline/mkline?param={security},m{freq},,{count}' 
 
         content = json.loads(requests.get(URL).content)
+        if content.get("code") and content["code"] == -1:
+            raise RuntimeError(f"api error : {content['msg']}")
+        
         data = content["data"][security]["m" + str(freq)]
 
         columns = ['time','open','close','high','low','volume','n1','n2']
@@ -213,8 +216,8 @@ class Api:
     @security_checker
     def query_prices_untilnow(self, security: str, frequency='60minute', count=10) -> pd.DataFrame:
         '''
-        tx支持: 1minute 5minute 10minute... 1day 1week 1month
-        xl支持:         5minute 10minute... 1day 1week 1month
+        tx支持: 1minute 5minute 15minute... 1day 1week 1month
+        xl支持:         5minute 15minute... 1day 1week 1month
         '''
 
         n    = int(''.join(c for c in frequency if c.isdigit()))
@@ -290,6 +293,31 @@ class Api:
 
         return df 
 
+    @security_checker
+    def query_data_in_day(self, security: str, day: datetime = datetime.now(), frequency="1minute") -> pd.DataFrame:
+        '''
+        查询一天之内的分钟级数据, 如果拿不到则会返回None(API有时间限制) 
+        frequency 必须是1, 5, 15, 30, 60分钟
+        NOTE: 如果用1分钟数据 通常只能获得当天的 数据有残缺 自行判断吧
+        '''
+        if type(day) != datetime:
+            raise TypeError
+        
+        if not frequency.endswith("minute"):
+            raise TypeError
+        
+        data = self.query_prices_untilnow(
+            security=security,
+            frequency=frequency,
+            count=10000000000 # 尽可能大
+        )
+
+        data = data[data.index.day == day.day]
+
+        return data
+
+
+        
 
 api = Api()
             
